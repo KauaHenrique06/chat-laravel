@@ -1,0 +1,127 @@
+<?php 
+
+namespace App\Services\User;
+
+use App\Exceptions\ApiException;
+use App\Http\Resources\User\UserCollection;
+use App\Http\Resources\User\UserResource;
+use App\Models\Role;
+use App\Models\User;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Hash;
+
+class UserService
+{
+    public function store(array $data): UserResource
+    {
+        Gate::authorize('create', User::class);
+
+        return DB::transaction(function() use ($data) {
+            $user = User::create($data);
+
+            if(!empty($data['role']))
+            {
+                $user->syncRoles($data['role']);
+            }
+
+            return new UserResource($user->load('roles'));
+        });
+    }
+
+    public function index(array $data): UserCollection
+    {
+        Gate::authorize('viewAny', User::class);
+
+        $user = User::with('roles')->paginate($data['perPage'], ['*'], 'page', $data['page']);
+        return new UserCollection($user);
+    }
+
+    public function show(array $data): UserResource
+    {
+        $user = User::with('roles')->findOrFail($data['id']);
+        Gate::authorize('view', $user);
+
+        return new UserResource($user);
+    }
+
+    public function update(array $data): UserResource
+    {
+        $user = User::findOrFail($data['id']);
+        Gate::authorize('update', $user);
+
+        return DB::transaction(function() use ($data, $user) { 
+            $user->update($data);
+
+            if(!empty($data['role']))
+            {
+                $role = Role::findById($data['role'], 'api');
+
+                if ($user->hasRole('admin') && $role->name !== 'admin' && User::role('admin')->count() === 1) {
+                    throw new ApiException('Cannot remove the last admin!', 422);
+                }
+
+                $user->syncRoles($role);
+            }
+
+            return new UserResource($user->refresh()->load('roles'));
+        });
+    }
+
+    public function delete(array $data): void
+    {
+        $user = User::findOrFail($data['id']);
+        Gate::authorize('delete', $user);
+
+        if ($user->hasRole('admin') && User::role('admin')->count() === 1) {
+            throw new ApiException('Cannot remove the last admin!', 422);
+        }
+
+        DB::transaction(fn () => $user->delete());
+    }
+
+    public function assignPermissionToUser(array $data): UserResource
+    {
+        $user = User::findOrFail($data['id']);
+
+        DB::transaction(fn () => $user->syncPermissions($data['permissions']));
+
+        return new UserResource($user->load('roles', 'permissions'));
+    }
+
+    public function changePassword(array $data): UserResource
+    {
+        $user = Auth::user();
+
+        if(!Hash::check($data['old_password'], $user->password)) 
+        {
+            throw new ApiException("The old password is incorrect!", 422);
+        }
+
+        if(Hash::check($data['new_password'], $user->password))
+        {
+            throw new ApiException("The new password must be different than old password!", 422);
+        }
+
+        return DB::transaction(function() use ($data, $user) {
+            $user->update([
+                'password' => $data['new_password']
+            ]);
+
+            return new UserResource($user->refresh());
+        });
+    }
+
+    public function resetPassword(array $data): UserResource
+    {
+        $user = User::findOrFail($data['id']);
+        Gate::authorize('resetPassword', User::class);
+
+        return DB::transaction(function() use ($data, $user) {
+            $user->update($data);
+            
+            return new UserResource($user->refresh());
+        });
+    }
+}
