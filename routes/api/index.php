@@ -6,3 +6,4 @@ Route::prefix('auth')->group(base_path('routes/api/auth.php'));
 Route::prefix('user')->group(base_path('routes/api/user.php'));
 Route::prefix('role')->group(base_path('routes/api/role.php'));
 Route::prefix('permission')->group(base_path('routes/api/permission.php'));
+Route::prefix('chat-group')->group(base_path('routes/api/chat-group.php'));

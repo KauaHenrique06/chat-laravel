@@ -12,6 +12,10 @@ return Application::configure(basePath: dirname(__DIR__))
         api: __DIR__.'/../routes/api/index.php',
         health: '/up',
     )
+    ->withBroadcasting(
+        __DIR__.'/../routes/channels.php',
+        ['prefix' => 'api', 'middleware' => ['auth:api']],
+    )
     ->withMiddleware(function (Middleware $middleware): void {
         //
     })

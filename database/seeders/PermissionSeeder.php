@@ -26,7 +26,10 @@ class PermissionSeeder extends Seeder
     public function run(): void
     {
         app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
-        Permission::truncate();
+        if(Permission::count() >= 1)
+        {
+            Permission::truncate();
+        }
 
         foreach (self::PERMISSIONS as $permission) 
         {
